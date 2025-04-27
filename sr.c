@@ -241,25 +241,25 @@ void B_input(struct pkt packet)
     int i;
     int offset;
 
-    /* if not corrupted */
+    /* Check if packet is corrupted */
     if (!IsCorrupted(packet)) {
-        /* Always print this message for non-corrupted packets */
+        /* Always print this message and count all non-corrupted packets */
         if (TRACE > 0)
             printf("----B: packet %d is correctly received, send ACK!\n", packet.seqnum);
         
-        /* Always increment packets_received for any non-corrupted packet */
+        /* Always increment packets_received for every non-corrupted packet */
         packets_received++;
         
-        /* Calculate offset in window */
+        /* Calculate offset in the receive window */
         offset = (packet.seqnum - rcv_base + SEQSPACE) % SEQSPACE;
         
         if (offset < WINDOWSIZE) {
-            /* Packet is within window */
+            /* Packet is within our window - buffer it if new */
             if (!received[offset]) {
                 rcv_buffer[offset] = packet;
                 received[offset] = true;
                 
-                /* If packet at base of window received, deliver in-order packets */
+                /* If we received packet at window base, deliver in-order packets */
                 if (offset == 0) {
                     while (received[0]) {
                         tolayer5(B, rcv_buffer[0].payload);
@@ -280,13 +280,13 @@ void B_input(struct pkt packet)
         /* Always send ACK for correctly received packet */
         sendpkt.acknum = packet.seqnum;
     } else {
-        /* packet corrupted */
+        /* Packet is corrupted */
         if (TRACE > 0)
             printf("----B: packet corrupted, do not send ACK!\n");
-        return;
+        return;  /* Don't ACK corrupted packets */
     }
     
-    /* create and send ACK packet */
+    /* Create ACK packet */
     sendpkt.seqnum = B_nextseqnum;
     B_nextseqnum = (B_nextseqnum + 1) % 2;
     for (i = 0; i < 20; i++)
