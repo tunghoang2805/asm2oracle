@@ -240,19 +240,17 @@ void B_input(struct pkt packet)
     struct pkt sendpkt;
     int i;
     int offset;
-
+    
     /* Check if packet is corrupted */
     if (!IsCorrupted(packet)) {
         /* Always print this message and count all non-corrupted packets */
         if (TRACE > 0)
             printf("----B: packet %d is correctly received, send ACK!\n", packet.seqnum);
-        
         /* Always increment packets_received for every non-corrupted packet */
         packets_received++;
         
         /* Calculate offset in the receive window */
         offset = (packet.seqnum - rcv_base + SEQSPACE) % SEQSPACE;
-        
         if (offset < WINDOWSIZE) {
             /* Packet is within our window - buffer it if new */
             if (!received[offset]) {
@@ -263,37 +261,31 @@ void B_input(struct pkt packet)
                 if (offset == 0) {
                     while (received[0]) {
                         tolayer5(B, rcv_buffer[0].payload);
-                        
                         /* Slide window */
                         for (i = 0; i < WINDOWSIZE - 1; i++) {
                             received[i] = received[i + 1];
                             rcv_buffer[i] = rcv_buffer[i + 1];
                         }
-                        received[WINDOWSIZE - 1] = false;
                         
+                        received[WINDOWSIZE - 1] = false;
                         rcv_base = (rcv_base + 1) % SEQSPACE;
                     }
                 }
             }
         }
         
-        /* Always send ACK for correctly received packet */
+        /* Create and send ACK for all non-corrupted packets */
         sendpkt.acknum = packet.seqnum;
-    } else {
-        /* Packet is corrupted */
-        if (TRACE > 0)
-            printf("----B: packet corrupted, do not send ACK!\n");
-        return;  /* Don't ACK corrupted packets */
+        sendpkt.seqnum = B_nextseqnum;
+        B_nextseqnum = (B_nextseqnum + 1) % 2;
+        for (i = 0; i < 20; i++)
+            sendpkt.payload[i] = '0';
+        sendpkt.checksum = ComputeChecksum(sendpkt);
+        tolayer3(B, sendpkt);
     }
-    
-    /* Create ACK packet */
-    sendpkt.seqnum = B_nextseqnum;
-    B_nextseqnum = (B_nextseqnum + 1) % 2;
-    for (i = 0; i < 20; i++)
-        sendpkt.payload[i] = '0';
-    sendpkt.checksum = ComputeChecksum(sendpkt);
-    tolayer3(B, sendpkt);
+    /* If packet is corrupted, silently ignore it - no debug message */
 }
+
 
 /* the following routine will be called once (only) before any other */
 /* entity B routines are called. You can use it to do any initialization */
